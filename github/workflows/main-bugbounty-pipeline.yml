@@ -1,0 +1,70 @@
+name: "🚀 Elite Bug Bounty Pipeline - Full Recon + Vuln Hunt"
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Target Domain (مثال: example.com)"
+        required: true
+        type: string
+      mode:
+        description: "Mode of Scan"
+        required: true
+        type: choice
+        options:
+          - full          # كل حاجة (موصى به)
+          - quick         # سريع
+          - deep-recon    # Recon فقط + Cache + Certs
+        default: full
+
+env:
+  TARGET: ${{ github.event.inputs.target }}
+  MODE: ${{ github.event.inputs.mode }}
+
+permissions:
+  contents: read
+
+jobs:
+  recon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup All Tools
+        uses: ./.github/actions/setup-bounty-tools
+
+      - name: Create Directories
+        run: mkdir -p results/${{ env.TARGET }}/{subs,urls,live,findings,cache,certs}
+
+      - name: Subdomain Enumeration + Certificates
+        run: |
+          # Subfinder + crt.sh + more
+          subfinder -d "$TARGET" -all -silent -o results/$TARGET/subs/subfinder.txt
+          curl -s "https://crt.sh/?q=%25.$TARGET&output=json" | jq -r '.[].name_value' 2>/dev/null | sed 's/\*\.//g' | grep -i ".$TARGET$" | sort -u > results/$TARGET/subs/crtsh.txt
+
+          # Merge
+          cat results/$TARGET/subs/*.txt 2>/dev/null | sort -u > results/$TARGET/subs/all.txt
+
+      - name: Web Cache & Archives (gau + wayback)
+        if: env.MODE != 'quick'
+        run: |
+          gau "$TARGET" --subs --o results/$TARGET/cache/gau.txt 2>/dev/null || true
+          echo "$TARGET" | waybackurls > results/$TARGET/cache/wayback.txt 2>/dev/null || true
+          cat results/$TARGET/cache/*.txt 2>/dev/null | uro > results/$TARGET/urls/all_urls.txt
+
+      - name: Live Hosts + Tech Detection
+        run: |
+          httpx -l results/$TARGET/subs/all.txt -silent -status-code -tech-detect -o results/$TARGET/live/live.txt -json
+
+      - name: Nuclei Scan (Vulnerability Hunting)
+        if: env.MODE == 'full'
+        run: |
+          nuclei -list results/$TARGET/live/live.txt -tags exposure,token,secret,misconfig,takeover -severity critical,high -o results/$TARGET/findings/nuclei.txt
+
+      - name: Upload Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: bugbounty-${{ env.TARGET }}
+          path: results/${{ env.TARGET }}/
+          retention-days: 30
