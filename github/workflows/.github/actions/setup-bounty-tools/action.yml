@@ -1,0 +1,25 @@
+name: 'Setup Bounty Tools'
+description: 'Install recon tools'
+
+inputs:
+  go-version:
+    default: '1.23'
+
+runs:
+  using: 'composite'
+  steps:
+    - uses: actions/setup-go@v5
+      with:
+        go-version: ${{ inputs.go-version }}
+        cache: true
+
+    - name: Install Tools
+      shell: bash
+      run: |
+        go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest
+        go install github.com/projectdiscovery/httpx/cmd/httpx@latest
+        go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
+        go install github.com/projectdiscovery/katana/cmd/katana@latest
+        go install github.com/projectdiscovery/dnsx/cmd/dnsx@latest
+        go install github.com/lc/gau/v2/cmd/gau@latest
+        nuclei -update-templates -silent 2>/dev/null || true
