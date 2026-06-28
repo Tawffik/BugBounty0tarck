@@ -1,0 +1,31 @@
+name: Bug Bounty Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Target Domain'
+        required: true
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Tools
+        uses: ./.github/actions/setup-bounty-tools
+
+      - name: Run Recon
+        run: |
+          TARGET="${{ github.event.inputs.target }}"
+          echo "Scanning $TARGET"
+          mkdir -p results/$TARGET
+          subfinder -d "$TARGET" -all -silent | head -20 > results/$TARGET/subs.txt
+          echo "Done scanning $TARGET" 
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-$TARGET
+          path: results/
