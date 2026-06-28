@@ -1,0 +1,32 @@
+name: "Deep Recon + Cache + Certs"
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Target Domain"
+        required: true
+
+jobs:
+  deep-recon:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Tools
+        uses: ./.github/actions/setup-bounty-tools
+
+      - name: Full Recon
+        run: |
+          TARGET="${{ github.event.inputs.target }}"
+          mkdir -p results/$TARGET
+
+          subfinder -d $TARGET -all -o results/$TARGET/subs.txt
+          gau $TARGET --subs -o results/$TARGET/urls.txt
+          httpx -l results/$TARGET/subs.txt -silent -o results/$TARGET/live.txt
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: deep-recon-$TARGET
+          path: results/
